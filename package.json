@@ -1,0 +1,47 @@
+{
+  "name": "servicenow-utils",
+  "version": "0.0.1",
+  "description": "A CLI toolkit for common ServiceNow admin and developer operations using OOTB REST APIs",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ImJaineel/ServiceNow-Utils"
+  },
+  "bin": {
+    "servicenow-utils": "./bin/cli.js"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE",
+    ".env.servicenow.example"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "node bin/cli.js"
+  },
+  "keywords": [
+    "servicenow",
+    "cli",
+    "sn",
+    "rest-api",
+    "automation",
+    "itsm",
+    "devops"
+  ],
+  "author": "Jaineel Petiwale",
+  "license": "SEE LICENSE IN LICENSE",
+  "funding": {
+    "type": "GitHub",
+    "url": "https://github.com/sponsors/ImJaineel"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

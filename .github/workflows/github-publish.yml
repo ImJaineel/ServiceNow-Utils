@@ -1,0 +1,36 @@
+name: Publish to GitHub Packages
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish-github:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # Vital for GitHub registry access
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@${{ github.repository_owner }}'
+
+      - run: npm ci
+
+      - name: Rename and Publish to GitHub
+        run: |
+          # Dynamically lowercase the repo name and set it in package.json
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          npm pkg set name="@$REPO_LOWER"
+
+          # Point the publish registry to GitHub
+          npm publish
+        env:
+          # Uses the built-in GITHUB_TOKEN automatically
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
