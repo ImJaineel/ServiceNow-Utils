@@ -7,12 +7,35 @@ import path from 'node:path';
  *   2. Environment variables already set in the shell
  *
  * Hard exits if neither source provides the required variables based on auth type.
+ *
+ * NOTE: process.loadEnvFile was introduced in Node.js 20.12.0. This package
+ * requires Node >=22 (see engines in package.json), so this is always safe.
+ * If you are using Node 20.0–20.11 you must upgrade to use .env.servicenow
+ * file loading; shell-exported variables still work on any Node >=18.
+ *
+ * SECURITY NOTE: SN_JWT_ASSERTION contains a sensitive credential. Avoid
+ * logging process.env or passing it to error reporters in your own tooling.
  */
 export function loadEnv() {
   const envPath = path.join(process.cwd(), '.env.servicenow');
 
   if (fs.existsSync(envPath)) {
-    process.loadEnvFile(envPath);
+    // process.loadEnvFile is available in Node >=20.12.0 / >=22.0.0 (issue #8)
+    if (typeof process.loadEnvFile === 'function') {
+      process.loadEnvFile(envPath);
+    } else {
+      // Graceful fallback for older Node versions: parse manually
+      const lines = fs.readFileSync(envPath, 'utf8').split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx === -1) continue;
+        const key = trimmed.slice(0, eqIdx).trim();
+        const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
+        if (key && !(key in process.env)) process.env[key] = val;
+      }
+    }
   }
 
   const missing = [];
