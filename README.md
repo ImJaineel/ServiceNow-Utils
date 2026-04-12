@@ -1,4 +1,4 @@
-# 🛠️ servicenow-utils
+# 🛠️ ServiceNow-Utils
 
 ✨ A CLI toolkit for common ServiceNow admin and developer operations using OOTB REST APIs. No extra plugins or scoped apps required! ✨
 
@@ -102,7 +102,8 @@ npx servicenow-utils bulk-update \
   --table <table> \
   --query <encoded_query> \
   --payload '<json>' \
-  [--limit <number>]
+  [--limit <number>] \
+  [--dry-run]
 ```
 
 | 🚩 Flag | ⚠️ Required | 📝 Description |
@@ -136,14 +137,14 @@ npx servicenow-utils export-legacy-wf-xml \
 
 | 🚩 Flag | ⚠️ Required | 📝 Description |
 |------|----------|-------------|
-| `-c, --catalog` | ✅ | Catalog item name (repeatable for multiple) |
-| `-o, --out-dir` | ❌ | Output directory (default: current directory) |
+| `-s, --sys-id` | ✅ | Catalog item sys_id(s) to export (repeatable) |
+| `-o, --out-dir` | ❌ | Directory to save XML files (default: cwd) |
 
 **💡 Example:**
 ```bash
-npx servicenow-utils export-wf-xml \
-  --catalog "New Employee Onboarding" \
-  --catalog "Software License Request" \
+npx servicenow-utils export-legacy-wf-xml \
+  --sys-id "a1b2c3d4e5f6..." \
+  --sys-id "f6e5d4c3b2a1..." \
   --out-dir ./exports
 ```
 

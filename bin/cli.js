@@ -31,6 +31,7 @@ Options:
   -q, --query <query>     Encoded query to filter records [required]
   -p, --payload <json>    JSON string of fields to update [required]
   -l, --limit <number>    Max number of records to update (default: 100)
+  -d, --dry-run           Show records that would be updated without updating them
   `,
   'export-legacy-wf-xml': `
 Usage: servicenow-utils export-legacy-wf-xml [options]
@@ -56,6 +57,7 @@ Commands:
       -q, --query <query>     Encoded query to filter records [required]
       -p, --payload <json>    JSON string of fields to update [required]
       -l, --limit <number>    Max number of records to update (default: 100)
+      -d, --dry-run           Show records that would be updated without updating them
   export-legacy-wf-xml        Export published legacy workflow XML
     Options:
       -s, --sys-id <sys_id>   Catalog item sys_id(s) to export (repeatable) [required]
@@ -103,7 +105,8 @@ try {
         table: { type: 'string', short: 't' },
         query: { type: 'string', short: 'q' },
         payload: { type: 'string', short: 'p' },
-        limit: { type: 'string', short: 'l', default: '100' }
+        limit: { type: 'string', short: 'l', default: '100' },
+        'dry-run': { type: 'boolean', short: 'd', default: false }
       },
       allowPositionals: true
     });
@@ -113,7 +116,7 @@ try {
     if (!values.payload) throw new Error("error: required option '-p, --payload <json>' not specified");
 
     const { runBulkUpdate } = await import('../src/commands/bulk-update.js');
-    await runBulkUpdate({ ...values, limit: parseInt(values.limit, 10) });
+    await runBulkUpdate({ ...values, limit: parseInt(values.limit, 10), dryRun: values['dry-run'] });
   } else if (command === 'export-legacy-wf-xml') {
     const { values } = parseArgs({
       args,
