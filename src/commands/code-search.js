@@ -11,16 +11,16 @@ export async function codeSearch(keyword) {
   if (!keyword) throw new Error('A keyword is required for code search.');
 
   const client = createClient();
-  const urlPath = `/api/sn_codesearch/code_search/search?term=${encodeURIComponent(keyword)}`;
+  const path = `/api/sn_codesearch/code_search/search?term=${encodeURIComponent(keyword)}`;
 
-  const { data } = await client.get(urlPath);
+  const { data } = await client.get(path);
 
   if (!data?.result?.length) return null;
 
-  // Return a new object instead of mutating the API response in place (issue #19)
-  const filteredResult = data.result.filter((item) => item.hits?.length > 0);
+  // Filter out record types with no hits
+  data.result = data.result.filter((item) => item.hits?.length > 0);
 
-  return filteredResult.length > 0 ? { ...data, result: filteredResult } : null;
+  return data.result.length > 0 ? data : null;
 }
 
 /**

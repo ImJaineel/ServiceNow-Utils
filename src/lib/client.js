@@ -4,10 +4,6 @@ import path from 'path';
 
 const MAX_RETRIES = 5;
 const INITIAL_DELAY = 500;
-const REQUEST_TIMEOUT_MS = 30000;
-
-// Validates that SN_INSTANCE is a safe hostname segment (issue #7)
-const INSTANCE_RE = /^[a-zA-Z0-9-]+$/;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -19,30 +15,9 @@ export function createClient() {
 
   const instance = process.env.SN_INSTANCE;
 
-  if (!INSTANCE_RE.test(instance)) {
-    throw new Error(
-      `Invalid SN_INSTANCE value "${instance}". ` +
-      'Must contain only alphanumeric characters and hyphens.'
-    );
-  }
-
   const baseUrl = `https://${instance}.service-now.com`;
 
   let cachedAuthHeader = null;
-
-  /**
-   * Clears the in-memory auth header cache so the next request re-authenticates.
-   * Called automatically when a 401 is received (issue #5).
-   */
-  function clearAuthCache() {
-    cachedAuthHeader = null;
-    // Also remove the on-disk token cache so OAuth2 re-fetches a fresh token
-    try {
-      if (fs.existsSync(TOKEN_CACHE_FILE)) fs.unlinkSync(TOKEN_CACHE_FILE);
-    } catch {
-      // Best-effort; ignore errors
-    }
-  }
 
   /**
    * Fetches an OAuth token and caches it.
@@ -73,12 +48,6 @@ export function createClient() {
           }
         });
       });
-
-      // Timeout guard (issue #12)
-      req.setTimeout(REQUEST_TIMEOUT_MS, () => {
-        req.destroy(new Error(`OAuth token request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`));
-      });
-
       req.on('error', reject);
       req.write(paramsString);
       req.end();
@@ -110,7 +79,7 @@ export function createClient() {
             cachedAuthHeader = `Bearer ${cached.access_token}`;
             return cachedAuthHeader;
           }
-        } catch {
+        } catch (e) {
           // Ignore cache read/parse errors, proceed to fetch a new token
         }
       }
@@ -136,15 +105,13 @@ export function createClient() {
       const tokenData = await fetchOAuthToken(params.toString());
       cachedAuthHeader = `Bearer ${tokenData.access_token}`;
 
-      // Save the newly fetched token to the local cache file.
-      // Write with mode 0o600 so only the owner can read it (issue #6).
+      // Save the newly fetched token to the local cache file
       try {
         const expires_at = Date.now() + ((tokenData.expires_in || 1800) * 1000);
-        fs.writeFileSync(
-          TOKEN_CACHE_FILE,
-          JSON.stringify({ access_token: tokenData.access_token, expires_at }, null, 2),
-          { encoding: 'utf8', mode: 0o600 }
-        );
+        fs.writeFileSync(TOKEN_CACHE_FILE, JSON.stringify({
+          access_token: tokenData.access_token,
+          expires_at
+        }, null, 2), 'utf8');
       } catch (e) {
         console.warn('[Warn] Failed to write token cache file:', e.message);
       }
@@ -157,16 +124,16 @@ export function createClient() {
 
   /**
    * Makes an HTTPS request to the ServiceNow instance.
-   * @param {string} method     - HTTP method (GET, PATCH, POST, PUT, DELETE, etc.)
-   * @param {string} urlPath    - URL path (e.g. /api/now/table/incident)
-   * @param {object} [body]     - Optional request body for PATCH/POST/PUT
-   * @param {number} [retries]  - Internal retry counter
+   * @param {string} method - HTTP method (GET, PATCH, POST, etc.)
+   * @param {string} path   - URL path (e.g. /api/now/table/incident)
+   * @param {object} [body] - Optional request body for PATCH/POST
+   * @param {number} [retries] - Internal retry counter
    * @returns {Promise<{status: number, data: any}>}
    */
-  async function request(method, urlPath, body = null, retries = 0) {
+  async function request(method, path, body = null, retries = 0) {
     const authHeader = await getAuthHeader();
     return new Promise((resolve, reject) => {
-      const url = `${baseUrl}${urlPath}`;
+      const url = `${baseUrl}${path}`;
       const bodyStr = body ? JSON.stringify(body) : null;
 
       const options = {
@@ -183,22 +150,15 @@ export function createClient() {
         let raw = '';
         res.on('data', (chunk) => (raw += chunk));
         res.on('end', async () => {
-          // Clear auth cache on 401 so the next call re-authenticates (issue #5)
-          if (res.statusCode === 401) {
-            clearAuthCache();
-            return reject(new Error('Unauthorized (401). Credentials may be invalid or expired.'));
-          }
-
-          // Retry on rate limiting and transient server errors (issue #11)
-          if (res.statusCode === 429 || res.statusCode >= 500) {
+          // Retry on rate limiting
+          if (res.statusCode === 429) {
             if (retries < MAX_RETRIES) {
               const wait = INITIAL_DELAY * 2 ** retries;
-              const reason = res.statusCode === 429 ? 'Rate limited (429)' : `Server error (${res.statusCode})`;
-              console.warn(`[Warn] ${reason}. Retrying in ${wait / 1000}s...`);
+              console.warn(`[Warn] Rate limited (429). Retrying in ${wait / 1000}s...`);
               await delay(wait);
-              return resolve(request(method, urlPath, body, retries + 1));
+              return resolve(request(method, path, body, retries + 1));
             } else {
-              return reject(new Error(`Request failed with status ${res.statusCode}. Max retries reached.`));
+              return reject(new Error('Too many requests (429). Max retries reached.'));
             }
           }
 
@@ -211,11 +171,6 @@ export function createClient() {
         });
       });
 
-      // Timeout guard (issue #12)
-      req.setTimeout(REQUEST_TIMEOUT_MS, () => {
-        req.destroy(new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s: ${method} ${urlPath}`));
-      });
-
       req.on('error', reject);
       if (bodyStr) req.write(bodyStr);
       req.end();
@@ -223,16 +178,12 @@ export function createClient() {
   }
 
   /**
-   * Convenience wrappers.
-   * Includes put and delete for full Table API coverage (issue #17).
+   * Convenience wrappers
    */
   return {
-    get:    (urlPath)        => request('GET',    urlPath),
-    post:   (urlPath, body)  => request('POST',   urlPath, body),
-    patch:  (urlPath, body)  => request('PATCH',  urlPath, body),
-    put:    (urlPath, body)  => request('PUT',    urlPath, body),
-    delete: (urlPath)        => request('DELETE', urlPath),
+    get: (path) => request('GET', path),
+    patch: (path, body) => request('PATCH', path, body),
+    post: (path, body) => request('POST', path, body),
     getAuthHeader,
-    baseUrl,
   };
 }

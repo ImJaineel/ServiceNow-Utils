@@ -3,9 +3,6 @@ import { createClient } from '../lib/client.js';
 const MAX_CONCURRENT_REQUESTS = 5;
 const PROGRESS_UPDATE_INTERVAL = 5;
 
-// Maximum records to fetch from sys_variable_value in one call (issue #10)
-const VARIABLE_FETCH_LIMIT = 1000;
-
 /**
  * Searches ServiceNow legacy workflows for a keyword.
  * Queries sys_variable_value for matches, then resolves workflow names
@@ -19,34 +16,20 @@ export async function legacyWFSearch(keyword) {
 
   const client = createClient();
 
-  // Step 1: Find variable values containing the keyword.
-  // A hard limit is applied to prevent fetching tens of thousands of records
-  // on large instances (issue #10). Increase VARIABLE_FETCH_LIMIT if needed.
+  // Step 1: Find variable values containing the keyword
   const { data: varData } = await client.get(
-    `/api/now/table/sys_variable_value` +
-    `?sysparm_query=valueLIKE${encodeURIComponent(keyword)}` +
-    `&sysparm_limit=${VARIABLE_FETCH_LIMIT}`
+    `/api/now/table/sys_variable_value?sysparm_query=valueLIKE${encodeURIComponent(keyword)}`
   );
 
   if (!varData?.result?.length) return {};
 
-  // Warn if the result set was capped (issue #10)
-  if (varData.result.length === VARIABLE_FETCH_LIMIT) {
-    console.warn(
-      `[Warn] Variable value query returned ${VARIABLE_FETCH_LIMIT} records (the limit). ` +
-      'Results may be incomplete. Consider narrowing your keyword.'
-    );
-  }
-
   const docKeys = varData.result.map((item) => item.document_key.value);
 
+  let totalTasks = docKeys.length;
   let completedTasks = 0;
-  const totalTasks = docKeys.length;
 
-  // Issue #1: completedTasks is incremented here only — never inside the
-  // forced final logProgress(true) call, which would have over-counted.
   function logProgress(force = false) {
-    if (!force) completedTasks++;
+    completedTasks++;
     if (force || completedTasks % PROGRESS_UPDATE_INTERVAL === 0 || completedTasks === totalTasks) {
       const pct = Math.min(100, ((completedTasks / totalTasks) * 100).toFixed(1));
       process.stdout.write(`\r📊 Progress: ${pct}% (${completedTasks}/${totalTasks})`);

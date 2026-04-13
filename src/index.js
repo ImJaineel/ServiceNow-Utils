@@ -7,13 +7,11 @@
  * All functions read credentials from:
  *   Environment variables or a .env.servicenow file.
  *   Requires SN_INSTANCE, SN_AUTH_TYPE, and specific credentials based on the auth type.
- *
- * TypeScript users: type declarations are provided in src/index.d.ts.
  */
 
-export { codeSearch }        from './commands/code-search.js';
-export { legacyWFSearch }    from './commands/legacy-wf-search.js';
-export { bulkUpdate }        from './commands/bulk-update.js';
+export { codeSearch }     from './commands/code-search.js';
+export { legacyWFSearch } from './commands/legacy-wf-search.js';
+export { bulkUpdate }     from './commands/bulk-update.js';
 export { exportLegacyWFXml } from './commands/export-legacy-wf-xml.js';
-export { loadEnv }           from './lib/env.js';
-export { createClient }      from './lib/client.js';
+export { loadEnv }        from './lib/env.js';
+export { createClient }   from './lib/client.js';

@@ -1,6 +1,6 @@
 {
   "name": "servicenow-utils",
-  "version": "0.0.2",
+  "version": "0.0.1",
   "description": "A CLI toolkit for common ServiceNow admin and developer operations using OOTB REST APIs",
   "type": "module",
   "repository": {
@@ -11,16 +11,11 @@
     "servicenow-utils": "./bin/cli.js"
   },
   "exports": {
-    ".": {
-      "types": "./src/index.d.ts",
-      "default": "./src/index.js"
-    }
+    ".": "./src/index.js"
   },
-  "types": "./src/index.d.ts",
   "files": [
     "bin",
     "src",
-    "test",
     "README.md",
     "LICENSE",
     ".env.servicenow.example"
@@ -29,9 +24,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "start": "node bin/cli.js",
-    "test": "node --test test/**/*.test.js",
-    "lint": "node --check src/**/*.js bin/cli.js"
+    "start": "node bin/cli.js"
   },
   "keywords": [
     "servicenow",
