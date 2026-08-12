@@ -8,12 +8,13 @@ const INITIAL_DELAY = 500;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Creates a configured ServiceNow API client.
+ * Creates a configured ServiceNow API client for a specific instance.
+ * @param {string} instance - Instance name, e.g. 'flexdev' (no .service-now.com suffix)
  */
-export function createClient() {
-  const TOKEN_CACHE_FILE = path.join(process.cwd(), '.sn-token.json');
+export function createClient(instance) {
+  if (!instance) throw new Error('An instance is required to create a ServiceNow client.');
 
-  const instance = process.env.SN_INSTANCE;
+  const TOKEN_CACHE_FILE = path.join(process.cwd(), `.sn-token.${instance}.json`);
 
   const baseUrl = `https://${instance}.service-now.com`;
 

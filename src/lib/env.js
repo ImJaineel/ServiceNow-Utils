@@ -6,6 +6,10 @@ import path from 'node:path';
  *   1. .env.servicenow file in the current working directory
  *   2. Environment variables already set in the shell
  *
+ * Only authentication credentials live here — the target instance is not
+ * global. It's supplied per-command via -i/--instance, or prompted for
+ * interactively if omitted (see lib/prompt.js).
+ *
  * Hard exits if neither source provides the required variables based on auth type.
  */
 export function loadEnv() {
@@ -17,8 +21,6 @@ export function loadEnv() {
 
   const missing = [];
   const authType = process.env.SN_AUTH_TYPE?.toLowerCase();
-
-  if (!process.env.SN_INSTANCE) missing.push('SN_INSTANCE');
 
   if (authType === 'basic') {
     if (!process.env.SN_USERNAME) missing.push('SN_USERNAME');

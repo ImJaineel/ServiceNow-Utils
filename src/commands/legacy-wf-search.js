@@ -9,12 +9,14 @@ const PROGRESS_UPDATE_INTERVAL = 5;
  * via wf_activity.
  *
  * @param {string} keyword - The search term
+ * @param {string} instance - ServiceNow instance name
  * @returns {Promise<object>} Map of workflow name → array of matching activity names
  */
-export async function legacyWFSearch(keyword) {
+export async function legacyWFSearch(keyword, instance) {
   if (!keyword) throw new Error('A keyword is required for workflow search.');
+  if (!instance) throw new Error('An instance is required for workflow search.');
 
-  const client = createClient();
+  const client = createClient(instance);
 
   // Step 1: Find variable values containing the keyword
   const { data: varData } = await client.get(
@@ -86,12 +88,13 @@ export async function legacyWFSearch(keyword) {
 /**
  * CLI handler for the legacy-wf-search command.
  * @param {string} keyword
+ * @param {string} instance
  */
-export async function runLegacyWFSearch(keyword) {
-  console.log(`\n🔍 Searching legacy workflows for: '${keyword}'...\n`);
+export async function runLegacyWFSearch(keyword, instance) {
+  console.log(`\n🔍 Searching legacy workflows on ${instance} for: '${keyword}'...\n`);
 
   try {
-    const workflows = await legacyWFSearch(keyword);
+    const workflows = await legacyWFSearch(keyword, instance);
     const count = Object.keys(workflows).length;
 
     if (count > 0) {

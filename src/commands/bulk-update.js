@@ -7,16 +7,18 @@ import { createClient } from '../lib/client.js';
  * @param {string} options.table        - Table name (e.g. 'incident')
  * @param {string} options.query        - Encoded query string (e.g. 'active=true')
  * @param {object} options.payload      - Fields to update on each record
+ * @param {string} options.instance     - ServiceNow instance name
  * @param {number} [options.limit=100]  - Max records to update
  * @param {boolean} [options.dryRun=false] - If true, only show records to be updated
  * @returns {Promise<{updated: number, failed: number}>}
  */
-export async function bulkUpdate({ table, query, payload, limit = 100, dryRun = false }) {
+export async function bulkUpdate({ table, query, payload, instance, limit = 100, dryRun = false }) {
   if (!table) throw new Error('--table is required.');
   if (!query) throw new Error('--query is required.');
   if (!payload || !Object.keys(payload).length) throw new Error('--payload is required.');
+  if (!instance) throw new Error('An instance is required.');
 
-  const client = createClient();
+  const client = createClient(instance);
 
   // Step 1: Fetch matching sys_ids
   const { data } = await client.get(
@@ -78,7 +80,7 @@ export async function bulkUpdate({ table, query, payload, limit = 100, dryRun = 
  * CLI handler for the bulk-update command.
  * @param {object} options
  */
-export async function runBulkUpdate({ table, query, payload, limit, dryRun }) {
+export async function runBulkUpdate({ table, query, payload, instance, limit, dryRun }) {
   let parsedPayload;
 
   try {
@@ -88,10 +90,10 @@ export async function runBulkUpdate({ table, query, payload, limit, dryRun }) {
     process.exit(1);
   }
 
-  console.log(`\n🔄 Bulk updating [${table}] | Query: ${query} | Limit: ${limit}${dryRun ? ' | DRY RUN' : ''}\n`);
+  console.log(`\n🔄 Bulk updating [${table}] on ${instance} | Query: ${query} | Limit: ${limit}${dryRun ? ' | DRY RUN' : ''}\n`);
 
   try {
-    const { updated, failed } = await bulkUpdate({ table, query, payload: parsedPayload, limit, dryRun });
+    const { updated, failed } = await bulkUpdate({ table, query, payload: parsedPayload, instance, limit, dryRun });
     if (dryRun) {
       console.log(`\n✅ Dry run complete. No records were updated.`);
     } else {

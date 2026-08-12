@@ -5,12 +5,14 @@ import { createClient } from '../lib/client.js';
  * Filters out record types with no hits.
  *
  * @param {string} keyword - The search term
+ * @param {string} instance - ServiceNow instance name
  * @returns {Promise<object|null>} Parsed search result or null if nothing found
  */
-export async function codeSearch(keyword) {
+export async function codeSearch(keyword, instance) {
   if (!keyword) throw new Error('A keyword is required for code search.');
+  if (!instance) throw new Error('An instance is required for code search.');
 
-  const client = createClient();
+  const client = createClient(instance);
   const path = `/api/sn_codesearch/code_search/search?term=${encodeURIComponent(keyword)}`;
 
   const { data } = await client.get(path);
@@ -26,12 +28,13 @@ export async function codeSearch(keyword) {
 /**
  * CLI handler for the code-search command.
  * @param {string} keyword
+ * @param {string} instance
  */
-export async function runCodeSearch(keyword) {
-  console.log(`\nSearching ServiceNow code for: '${keyword}'...\n`);
+export async function runCodeSearch(keyword, instance) {
+  console.log(`\nSearching ServiceNow code on ${instance} for: '${keyword}'...\n`);
 
   try {
-    const result = await codeSearch(keyword);
+    const result = await codeSearch(keyword, instance);
 
     if (result) {
       console.log(`Found ${result.result.length} record type(s) with matches:\n`);

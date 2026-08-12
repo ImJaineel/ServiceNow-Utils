@@ -1,6 +1,6 @@
 {
   "name": "servicenow-utils",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A CLI toolkit for common ServiceNow admin and developer operations using OOTB REST APIs",
   "type": "module",
   "repository": {
