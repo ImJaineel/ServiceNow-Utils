@@ -12,13 +12,13 @@ import { createClient } from '../lib/client.js';
  * @param {boolean} [options.dryRun=false] - If true, only show records to be updated
  * @returns {Promise<{updated: number, failed: number}>}
  */
-export async function bulkUpdate({ table, query, payload, instance, limit = 100, dryRun = false }) {
+export async function bulkUpdate({ table, query, payload, instance, auth, limit = 100, dryRun = false }) {
   if (!table) throw new Error('--table is required.');
   if (!query) throw new Error('--query is required.');
   if (!payload || !Object.keys(payload).length) throw new Error('--payload is required.');
   if (!instance) throw new Error('An instance is required.');
 
-  const client = createClient(instance);
+  const client = createClient(instance, auth);
 
   // Step 1: Fetch matching sys_ids
   const { data } = await client.get(
@@ -80,7 +80,7 @@ export async function bulkUpdate({ table, query, payload, instance, limit = 100,
  * CLI handler for the bulk-update command.
  * @param {object} options
  */
-export async function runBulkUpdate({ table, query, payload, instance, limit, dryRun }) {
+export async function runBulkUpdate({ table, query, payload, instance, auth, limit, dryRun }) {
   let parsedPayload;
 
   try {
@@ -93,7 +93,7 @@ export async function runBulkUpdate({ table, query, payload, instance, limit, dr
   console.log(`\n🔄 Bulk updating [${table}] on ${instance} | Query: ${query} | Limit: ${limit}${dryRun ? ' | DRY RUN' : ''}\n`);
 
   try {
-    const { updated, failed } = await bulkUpdate({ table, query, payload: parsedPayload, instance, limit, dryRun });
+    const { updated, failed } = await bulkUpdate({ table, query, payload: parsedPayload, instance, auth, limit, dryRun });
     if (dryRun) {
       console.log(`\n✅ Dry run complete. No records were updated.`);
     } else {

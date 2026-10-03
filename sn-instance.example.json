@@ -1,0 +1,51 @@
+{
+  "default": "dev",
+  "instances": [
+    {
+      "_comment": "── Basic Auth (default) ──────────────────────────────────────",
+      "alias": "prod",
+      "label": "Production (Basic)",
+      "instance": "your-prod-instance",
+      "auth": "basic",
+      "username": "svc_mcp_readonly",
+      "password": "your-prod-password"
+    },
+    {
+      "_comment": "── OAuth2: Client Credentials ────────────────────────────────",
+      "alias": "dev",
+      "label": "Development (OAuth2 Client Credentials)",
+      "instance": "your-dev-instance",
+      "auth": "oauth2",
+      "grant_type": "client_credentials",
+      "client_id": "your-client-id",
+      "client_secret": "your-client-secret",
+      "token_url": "https://your-dev-instance/oauth_token.do",
+      "default": true
+    },
+    {
+      "_comment": "── OAuth2: Resource Owner Password ──────────────────────────",
+      "alias": "test",
+      "label": "Test (OAuth2 Password Grant)",
+      "instance": "your-test-instance",
+      "auth": "oauth2",
+      "grant_type": "password",
+      "client_id": "your-client-id",
+      "client_secret": "your-client-secret",
+      "token_url": "https://your-test-instance/oauth_token.do",
+      "username": "svc_mcp_readonly",
+      "password": "your-user-password"
+    },
+    {
+      "_comment": "── OAuth2: Authorization Code (refresh token rotation) ───────",
+      "alias": "staging",
+      "label": "Staging (OAuth2 Auth Code)",
+      "instance": "your-staging-instance",
+      "auth": "oauth2",
+      "grant_type": "authorization_code",
+      "client_id": "your-client-id",
+      "client_secret": "your-client-secret",
+      "token_url": "https://your-staging-instance/oauth_token.do",
+      "refresh_token": "your-long-lived-refresh-token"
+    }
+  ]
+}

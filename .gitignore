@@ -1,5 +1,6 @@
 node_modules/
 .env.servicenow
+sn-instance.json
 *.xml
 SC_Task*/
 .sn-token.json

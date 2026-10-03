@@ -37,11 +37,11 @@ function downloadRaw(url, authHeader) {
  * @param {string}  [options.outDir]    - Output directory (defaults to cwd)
  * @returns {Promise<{exported: number, skipped: number}>}
  */
-export async function exportLegacyWFXml({ sysIds, instance, outDir = process.cwd() }) {
+export async function exportLegacyWFXml({ sysIds, instance, auth, outDir = process.cwd() }) {
   if (!sysIds?.length) throw new Error('At least one --sys-id is required.');
   if (!instance) throw new Error('An instance is required.');
 
-  const client = createClient(instance);
+  const client = createClient(instance, auth);
 
   let exported = 0;
   let skipped = 0;
@@ -79,8 +79,11 @@ export async function exportLegacyWFXml({ sysIds, instance, outDir = process.cwd
 
     console.log(`  ➡ Downloading XML → ${fileName}`);
 
+    const instanceHost = /^https?:\/\//i.test(instance)
+      ? new URL(instance).host
+      : /\./.test(instance) ? instance.replace(/\/$/, '') : `${instance}.service-now.com`;
     const xmlUrl =
-      `https://${instance}.service-now.com/export_workflow.do` +
+      `https://${instanceHost}/export_workflow.do` +
       `?sysparm_sys_id=${version.sys_id}&sysparm_wf_id=${item.workflow.value}`;
 
     const xml = await downloadRaw(xmlUrl, authHeader);
@@ -97,13 +100,13 @@ export async function exportLegacyWFXml({ sysIds, instance, outDir = process.cwd
  * CLI handler for the export-legacy-wf-xml command.
  * @param {object} options
  */
-export async function runExportLegacyWFXml({ sysIds, instance, outDir }) {
+export async function runExportLegacyWFXml({ sysIds, instance, auth, outDir }) {
   const sysIdList = Array.isArray(sysIds) ? sysIds : [sysIds];
 
   console.log(`\n📦 Exporting legacy workflow XML from ${instance} for ${sysIdList.length} catalog item(s)...\n`);
 
   try {
-    const { exported, skipped } = await exportLegacyWFXml({ sysIds: sysIdList, instance, outDir });
+    const { exported, skipped } = await exportLegacyWFXml({ sysIds: sysIdList, instance, auth, outDir });
     console.log(`\n🎉 Done. Exported: ${exported} | Skipped: ${skipped}`);
   } catch (err) {
     console.error(`[Error] ${err.message}`);

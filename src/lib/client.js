@@ -1,6 +1,4 @@
 import https from 'https';
-import fs from 'fs';
-import path from 'path';
 
 const MAX_RETRIES = 5;
 const INITIAL_DELAY = 500;
@@ -11,21 +9,33 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * Creates a configured ServiceNow API client for a specific instance.
  * @param {string} instance - Instance name, e.g. 'flexdev' (no .service-now.com suffix)
  */
-export function createClient(instance) {
+export function createClient(instance, credentials) {
   if (!instance) throw new Error('An instance is required to create a ServiceNow client.');
-
-  const TOKEN_CACHE_FILE = path.join(process.cwd(), `.sn-token.${instance}.json`);
-
-  const baseUrl = `https://${instance}.service-now.com`;
-
+  const instanceHost = /^https?:\/\//i.test(instance)
+    ? new URL(instance).host
+    : /\./.test(instance) ? instance.replace(/\/$/, '') : `${instance}.service-now.com`;
+  const baseUrl = `https://${instanceHost}`;
+  const auth = credentials || {
+    authType: process.env.SN_AUTH_TYPE?.toLowerCase(),
+    grantType: process.env.SN_GRANT_TYPE?.toLowerCase(),
+    username: process.env.SN_USERNAME,
+    password: process.env.SN_PASSWORD,
+    clientId: process.env.SN_CLIENT_ID,
+    clientSecret: process.env.SN_CLIENT_SECRET,
+    refreshToken: process.env.SN_REFRESH_TOKEN,
+    authorizationCode: process.env.SN_AUTHORIZATION_CODE,
+    redirectUri: process.env.SN_REDIRECT_URI,
+    tokenUrl: process.env.SN_TOKEN_URL,
+  };
   let cachedAuthHeader = null;
+  let tokenExpiresAt = 0;
 
   /**
    * Fetches an OAuth token and caches it.
    */
   function fetchOAuthToken(paramsString) {
     return new Promise((resolve, reject) => {
-      const url = `${baseUrl}/oauth_token.do`;
+      const url = auth.tokenUrl || `${baseUrl}/oauth_token.do`;
       const options = {
         method: 'POST',
         headers: {
@@ -38,10 +48,13 @@ export function createClient(instance) {
         let raw = '';
         res.on('data', (chunk) => (raw += chunk));
         res.on('end', () => {
+          if (res.statusCode === 401) {
+            return reject(new Error('OAuth authentication failed (HTTP 401). Check the client credentials and grant configuration.'));
+          }
           try {
             const data = JSON.parse(raw);
             if (data.error) {
-              return reject(new Error(`OAuth Error: ${data.error_description || data.error}`));
+              return reject(new Error(`OAuth authentication failed: ${data.error_description || data.error}`));
             }
             resolve(data);
           } catch (e) {
@@ -59,63 +72,52 @@ export function createClient(instance) {
    * Resolves the correct Authorization header value based on the selected Auth Type.
    */
   async function getAuthHeader() {
-    if (cachedAuthHeader) return cachedAuthHeader;
+    if (cachedAuthHeader && (auth.authType !== 'oauth2' || tokenExpiresAt > Date.now() + 60000)) return cachedAuthHeader;
 
-    const authType = process.env.SN_AUTH_TYPE?.toLowerCase();
+    const authType = String(auth.authType || auth.auth_type || auth.auth || '').toLowerCase();
 
     if (authType === 'basic') {
-      const username = process.env.SN_USERNAME;
-      const password = process.env.SN_PASSWORD;
+      const username = auth.username;
+      const password = auth.password;
+      if (!username || !password) throw new Error('Basic auth requires username and password.');
       cachedAuthHeader = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
       return cachedAuthHeader;
     }
 
     if (authType === 'oauth2') {
-      // Try loading a valid token from the local cache file first
-      if (fs.existsSync(TOKEN_CACHE_FILE)) {
-        try {
-          const cached = JSON.parse(fs.readFileSync(TOKEN_CACHE_FILE, 'utf8'));
-          // Ensure token exists and isn't expiring within the next 60 seconds
-          if (cached.access_token && cached.expires_at > Date.now() + 60000) {
-            cachedAuthHeader = `Bearer ${cached.access_token}`;
-            return cachedAuthHeader;
-          }
-        } catch (e) {
-          // Ignore cache read/parse errors, proceed to fetch a new token
-        }
+      const grantType = String(auth.grantType || auth.grant_type || '').toLowerCase();
+      if (!grantType || !auth.clientId || !auth.clientSecret) {
+        throw new Error('OAuth 2.0 auth requires grantType, clientId, and clientSecret.');
       }
-
-      const grantType = process.env.SN_GRANT_TYPE?.toLowerCase();
       const params = new URLSearchParams();
-      params.append('client_id', process.env.SN_CLIENT_ID);
-      params.append('client_secret', process.env.SN_CLIENT_SECRET);
+      params.append('client_id', auth.clientId || auth.client_id);
+      params.append('client_secret', auth.clientSecret || auth.client_secret);
 
       if (grantType === 'password') {
         params.append('grant_type', 'password');
-        params.append('username', process.env.SN_USERNAME);
-        params.append('password', process.env.SN_PASSWORD);
+        params.append('username', auth.username);
+        params.append('password', auth.password);
       } else if (grantType === 'client_credentials') {
         params.append('grant_type', 'client_credentials');
-      } else if (grantType === 'jwt-bearer' || grantType === 'urn:ietf:params:oauth:grant-type:jwt-bearer') {
-        params.append('grant_type', 'urn:ietf:params:oauth:grant-type:jwt-bearer');
-        params.append('assertion', process.env.SN_JWT_ASSERTION);
+      } else if (grantType === 'authorization_code') {
+        if (auth.refreshToken || auth.refresh_token) {
+          params.append('grant_type', 'refresh_token');
+          params.append('refresh_token', auth.refreshToken || auth.refresh_token);
+        } else if (auth.authorizationCode || auth.authorization_code) {
+          params.append('grant_type', 'authorization_code');
+          params.append('code', auth.authorizationCode || auth.authorization_code);
+          if (auth.redirectUri || auth.redirect_uri) params.append('redirect_uri', auth.redirectUri || auth.redirect_uri);
+        } else {
+          throw new Error('OAuth authorization_code grant requires a refreshToken or authorizationCode.');
+        }
       } else {
         throw new Error(`Unsupported SN_GRANT_TYPE: ${grantType}`);
       }
 
       const tokenData = await fetchOAuthToken(params.toString());
+      if (!tokenData.access_token) throw new Error('OAuth response did not contain an access_token.');
       cachedAuthHeader = `Bearer ${tokenData.access_token}`;
-
-      // Save the newly fetched token to the local cache file
-      try {
-        const expires_at = Date.now() + ((tokenData.expires_in || 1800) * 1000);
-        fs.writeFileSync(TOKEN_CACHE_FILE, JSON.stringify({
-          access_token: tokenData.access_token,
-          expires_at
-        }, null, 2), 'utf8');
-      } catch (e) {
-        console.warn('[Warn] Failed to write token cache file:', e.message);
-      }
+      tokenExpiresAt = Date.now() + ((tokenData.expires_in || 1800) * 1000);
 
       return cachedAuthHeader;
     }
@@ -161,6 +163,13 @@ export function createClient(instance) {
             } else {
               return reject(new Error('Too many requests (429). Max retries reached.'));
             }
+          }
+
+          if (res.statusCode === 401) {
+            return reject(new Error(`Authentication failed for ${instanceHost} (HTTP 401). Check the configured credentials.`));
+          }
+          if (res.statusCode === 403) {
+            return reject(new Error(`Access denied for ${instanceHost} (HTTP 403). Check the account permissions.`));
           }
 
           try {

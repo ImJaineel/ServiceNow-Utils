@@ -47,28 +47,35 @@ npm install -g servicenow-utils
 
 ## 🔐 Authentication
 
-Create a `.env.servicenow` file in your working directory:
+Credentials can come from a JSON profile, `.env.servicenow`, or system environment variables. The CLI reads `.env.servicenow` without loading it into `process.env`; file values take precedence over system values, and instance-prefixed variables take precedence over generic variables within each source.
+
+For environment credentials, create a `.env.servicenow` file in your working directory:
 
 ```bash
 cp .env.servicenow.example .env.servicenow
 ```
 
 ```env
-SN_AUTH_TYPE=basic
-SN_USERNAME=your-username
-SN_PASSWORD=your-password
+DEV21345_SN_AUTH_TYPE=basic
+DEV21345_SN_USERNAME=your-username
+DEV21345_SN_PASSWORD=your-password
 ```
 
-Alternatively, set `SN_USERNAME` and `SN_PASSWORD` as environment variables directly.
+Generic `SN_AUTH_TYPE`, `SN_USERNAME`, and `SN_PASSWORD` values are supported as fallbacks. OAuth supports `client_credentials`, `password`, and `authorization_code` grants.
 
-This file holds **authentication only**. The target instance is not global — every command takes it via `-i, --instance`, and if you leave it out you'll be prompted for it interactively:
+Use a profile's default alias or select one explicitly with `-e`:
 
 ```bash
-npx servicenow-utils code-search GlideRecord
-# ServiceNow instance (e.g. flexdev): █
+npx servicenow-utils code-search GlideRecord --profile ./sn-instance.json
+npx servicenow-utils code-search GlideRecord --profile ./sn-instance.json -e dev
 ```
 
-> **Note:** `deploy-updateset` takes two instances via `--from`/`--to` (not `-i`) but otherwise respects `SN_AUTH_TYPE` like all other commands.
+Environment mode requires an actual instance name. Bare `--env` forces it even when `--profile` is present:
+
+```bash
+npx servicenow-utils code-search GlideRecord --env -i dev21345
+npx servicenow-utils code-search GlideRecord -i companydev.service-now.com
+```
 
 ---
 
@@ -134,7 +141,7 @@ npx servicenow-utils bulk-update \
 
 | 🚩 Flag | ⚠️ Required | 📝 Description |
 |------|----------|-------------|
-| `-i, --instance` | ❌ | ServiceNow instance (prompted for if omitted) |
+| `-i, --instance` | Env mode | Actual ServiceNow instance name or host |
 | `-t, --table` | ✅ | Table name (e.g. `incident`) |
 | `-q, --query` | ✅ | Encoded query to filter records |
 | `-p, --payload` | ✅ | JSON string of fields to update |
@@ -154,24 +161,37 @@ npx servicenow-utils bulk-update \
 
 ### 🚀 `deploy-updateset`
 
-Deploy a completed update set from one instance to another using the OOTB CI/CD API: validate the update set is complete → retrieve on the target (auto-preview + cleanup) → commit. This is a scripted equivalent of manually retrieving and committing a remote update set in the UI.
+Deploy a completed update set between instances using the OOTB CI/CD API. The command verifies the source update set and checks for an existing target collision. `--dry-run` performs only those read-only checks; a normal run retrieves, previews, and commits the update set.
 
-Credentials come from `.env.servicenow` and are used against **both** instances via the shared auth layer — `SN_AUTH_TYPE` is respected, so `basic`, `oauth2` (password / client_credentials / jwt-bearer) all work. The target instance must already have an active `sys_update_set_source` pointing at the origin.
+The target instance must have an active `sys_update_set_source` pointing at the origin. Use profile aliases:
+
+```bash
+npx servicenow-utils deploy-updateset \
+  --profile ./sn-instance.json \
+  --update-set <sys_id> \
+  --from-env dev \
+  --to-env test \
+  [--dry-run]
+```
+
+Or use per-instance environment credentials:
 
 ```bash
 npx servicenow-utils deploy-updateset \
   --update-set <sys_id> \
-  --from <origin_instance> \
-  --to <target_instance> \
+  --from dev21345 \
+  --to companytest.service-now.com \
   [--dry-run]
 ```
 
 | 🚩 Flag | ⚠️ Required | 📝 Description |
 |------|----------|-------------|
 | `-u, --update-set` | ✅ | sys_id of the update set on the origin instance |
-| `-f, --from` | ✅ | Origin instance name, e.g. `flexdev` |
-| `-t, --to` | ✅ | Target instance name, e.g. `flextest` |
-| `-d, --dry-run` | ❌ | Retrieve + preview only, skip commit |
+| `-f, --from` | Env mode | Origin instance name |
+| `-t, --to` | Env mode | Target instance name |
+| `--profile` | Profile mode | JSON profile path |
+| `--from-env`, `--to-env` | Profile mode | Source and target aliases |
+| `-d, --dry-run` | ❌ | Readiness and collision check only; no writes |
 | `-c, --cleanup-retrieved` | ❌ | Delete previously retrieved copies before retrieving |
 
 **💡 Example:**
@@ -200,7 +220,7 @@ npx servicenow-utils export-legacy-wf-xml \
 
 | 🚩 Flag | ⚠️ Required | 📝 Description |
 |------|----------|-------------|
-| `-i, --instance` | ❌ | ServiceNow instance (prompted for if omitted) |
+| `-i, --instance` | Env mode | Actual ServiceNow instance name or host |
 | `-s, --sys-id` | ✅ | Catalog item sys_id(s) to export (repeatable) |
 | `-o, --out-dir` | ❌ | Directory to save XML files (default: cwd) |
 
@@ -224,25 +244,35 @@ import {
   codeSearch,
   legacyWFSearch,
   bulkUpdate,
-  exportWFXml,
+  exportLegacyWFXml,
   deployUpdateSet,
-  loadEnv,
-  createClient,
 } from 'servicenow-utils';
 
-// Load credentials first
-loadEnv();
+const devAuth = {
+  authType: 'basic',
+  username: process.env.SN_USERNAME,
+  password: process.env.SN_PASSWORD,
+};
+const testAuth = {
+  authType: 'oauth2',
+  grantType: 'client_credentials',
+  clientId: process.env.TEST_SN_CLIENT_ID,
+  clientSecret: process.env.TEST_SN_CLIENT_SECRET,
+};
 
-// Then call any function — the instance is always an explicit argument now,
-// there's no global SN_INSTANCE to fall back to
-const results = await codeSearch('GlideRecord', 'flexdev');
-const workflows = await legacyWFSearch('approval', 'flexdev');
+// Instance names and auth objects are explicit. CLI profiles/tags aren't used.
+const results = await codeSearch('GlideRecord', 'dev21345', devAuth);
+const workflows = await legacyWFSearch('approval', 'dev21345', devAuth);
 const deploy = await deployUpdateSet({
   updateSetId: 'a1b2c3d4e5f6...',
-  from: 'flexdev',
-  to: 'flextest',
+  from: 'dev21345',
+  to: 'companytest.service-now.com',
+  fromAuth: devAuth,
+  toAuth: testAuth,
 });
 ```
+
+The auth object accepts `authType: 'basic'` or `authType: 'oauth2'` with `grantType: 'client_credentials'`, `'password'`, or `'authorization_code'`. `resolveConfig()` is also exported for applications that explicitly want the same file/profile resolution used by the CLI.
 
 ---
 
